@@ -24,7 +24,7 @@ var sounds = {
     volume: 0.5
   },
   "heal" : {
-    url : "sounds/heal_.wav"
+    url : "sounds/hmm_.wav"
   },
   "exp" : {
     url : "sounds/exp_.wav"
@@ -38,6 +38,9 @@ var sounds = {
   },
   "spawn" : {
     url : "sounds/spawn_.wav"
+  },
+  "bounce" : {
+    url : "sounds/bounce_.wav"
   },
 };
 

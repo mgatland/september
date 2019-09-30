@@ -8,3 +8,5 @@ ffmpeg -i playerexp.wav -acodec pcm_s16le playerexp_.wav
 ffmpeg -i playerhit.wav -acodec pcm_s16le playerhit_.wav
 ffmpeg -i hitwall.wav -acodec pcm_s16le hitwall_.wav
 ffmpeg -i spawn.wav -acodec pcm_s16le spawn_.wav
+ffmpeg -i bounce.wav -acodec pcm_s16le bounce_.wav
+ffmpeg -i hmm.wav -acodec pcm_s16le hmm_.wav

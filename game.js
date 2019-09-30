@@ -604,16 +604,19 @@ function updatePlayerAxis (player, axis, moreKey, lessKey, maxVel) {
 }
 
 const levels = [{}, { type: 'beamer', x: 1.5, y: 1.5 }, { type: 'beamer', x: 8.5, y: 8.5 },
-  { type: 'bouncer', x: 2.5, y: 6.5 }, { type: 'bouncer', x: 2.5, y: 3.5 }]
+  { type: 'bouncer', x: 2.5, y: 6.5 }, { type: 'bouncer', x: 2.5, y: 3.5 }, {}, {}, {}, {}, {},
+  { type: 'beamer', x: 8.5, y: 1.5 }, ]
 
 function levelUp () {
   const level = levels[player.score]
   if (level) {
     if (level.type === 'beamer') {
       ents.push(new Beamer(level.x * tileSize, level.y * tileSize))
+      playSound('bounce')
     }
     if (level.type === 'bouncer') {
       ents.push(new Bouncer(level.x * tileSize, level.y * tileSize))
+      playSound('bounce')
     }
   }
 }

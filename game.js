@@ -9,6 +9,7 @@ const smallSprite = 24
 const fontSize = 24
 const lineHeight = 32
 const blankLineCharDelay = 130
+let mousePos = { x: 0, y: 0 }
 
 class Player {
   constructor (x, y) {
@@ -19,13 +20,12 @@ class Player {
     this.checkpoints = {}
     this.trail = []
     this.score = 0
-    this.megaBird = false
     this.fireTimer = 0
     this.refireRate = 6
     this.ammo = 0
     this.maxAmmo = 100
     this.health = 0
-    this.maxHealth = 100
+    this.maxHealth = 1
     this.ammo = this.maxAmmo
     this.health = this.maxHealth
   }
@@ -89,7 +89,7 @@ class Enemy {
     if (!player.dead && this.hurtsOnTouch && isTouching(this, player)) {
       if (!player.winner) hurt(player, 10)
       playSound('playerhit')
-      hurt(this, 9000)
+      // hurt(this, 9000)
     }
   }
   _startRandomMove (chasePlayer) {
@@ -113,110 +113,97 @@ class Enemy {
   }
 }
 
-class OhSpawner extends Enemy {
+class Beamer extends Enemy {
   constructor (x, y) {
     super(x, y)
-    this.maxSpawnTimer = 15
-    this.spawnTimer = this.maxSpawnTimer
+    this.state = 'done'
+    this.timer = 150
     this.health = 200
     this.maxHealth = 200
     this.deadEffect = 'spawnerDeadRing'
-    this.baseSprite = 3
-    this.hurtsOnTouch = false
+    this.baseSprite = 21
     this.spawnerId = spawnerId++
-  }
-  spawn () {
-    ents.push(new OhRing(this.pos.x, this.pos.y, this.spawnerId))
+    this.targetPos = { x: 0, y: 0 }
   }
   move () {
     this.sprite = this.baseSprite + Math.floor(frame / 15) % 2
-    if (!this.inActiveRange()) {
-      return
-    }
-    if (this.spawnTimer > 0) {
-      this.spawnTimer--
-      if (this.spawnTimer === 0) {
-        this.spawnTimer = this.maxSpawnTimer
-        this.spawn()
-        playSound('spawn')
-        const childCount = ents.filter(e => !e.dead && e.parentId === this.spawnerId).length
-        if (childCount > 5) this.spawnTimer *= 2
-        if (childCount > 12) this.spawnTimer *= 2
-        if (childCount > 20) this.spawnTimer *= 2
+    if (this.timer > 0) {
+      this.timer--
+      if (this.timer === 0) {
+        if (this.state === 'aim') {
+          this.state = 'charge'
+          this.timer = 30
+        } else if (this.state === 'charge') {
+          this.state = 'done'
+          this.timer = 60
+          this.shoot()
+          playSound('spawn')
+        } else if (this.state === 'done') {
+          this.state = 'aim'
+          this.timer = 90
+        }
+      }
+
+      if (this.state === 'aim') {
+        this.targetPos.x = player.pos.x
+        this.targetPos.y = player.pos.y
       }
     }
     super.move()
   }
+  shoot () {
+    const beam = this.getBeam(true)
+    for (let b of beam) {
+      const shot = {
+        pos: { x: b.x, y: b.y },
+        vel: { x: 0, y: 0 }
+      }
+      shot.hurtsPlayer = true
+      shot.age = 0
+      shots.push(shot)
+    }
+  }
+  getBeam (isLong = false) {
+    const dist = isLong ? 300 : distance(this.pos, this.targetPos)
+    const spacing = 8
+    const particles = Math.floor(dist / spacing) - 2
+    const angle = getAngle(this.pos, this.targetPos)
+    const tempPos = { x: this.pos.x, y: this.pos.y }
+    const dX = Math.cos(angle) * spacing
+    const dY = Math.sin(angle) * spacing
+    const result = []
+    for (let i = 0; i < particles; i++) {
+      tempPos.x += dX
+      tempPos.y += dY
+      result.push({ x: tempPos.x, y: tempPos.y })
+    }
+    return result
+  }
+  draw () {
+    super.draw()
+    if (this.state !== 'aim' && this.state !== 'charge') {
+      return
+    }
+    const sprite = (this.state === 'aim') ? smallSprite : smallSprite + 1
+    const beam = this.getBeam(this.state === 'charge')
+    for (let b of beam) {
+      drawSprite(sprite, b.x, b.y)
+    }
+  }
 }
 
-class BatSpawner extends OhSpawner {
-  constructor (x, y) {
-    super(x, y)
-    this.baseSprite = 14
-  }
-  spawn () {
-    ents.push(new BatWing(this.pos.x, this.pos.y, this.spawnerId))
-  }
-}
-
-class SignPost extends Enemy {
-  constructor (x, y) {
-    super(x, y)
-    this.sprite = 17
-    this.hurtsOnTouch = false
-    this.isSign = true
-    this.deadEffect = 'spawnerDeadRing'
-  }
-  move () {
-    super.move()
-  }
-}
-
-class OhRing extends Enemy {
+class Bouncer extends Enemy {
   constructor (x, y, sId) {
     super(x, y, sId)
-    this.refireRate = 120
-    this.fireMode = 'star'
-    this.maxMoveTimer = 90
-    this.trash = true
-    this.fireTimer = this.refireRate / 2
+    this.vel.x = 2
   }
   move () {
-    if (this.moveTimer > 0) {
-      this.moveTimer--
-    } else {
-      this._startRandomMove()
-    }
+    this.sprite = 18 + Math.floor(frame / 18) % 3
     this.pos.x += this.vel.x
     this.pos.y += this.vel.y
     if (getCollidingTiles(this.pos)) {
       this.pos.x -= this.vel.x
-      this.pos.y -= this.vel.y
-      this._startRandomMove()
-    }
-    super.move()
-  }
-}
-
-class BatWing extends Enemy {
-  constructor (x, y, sId) {
-    super(x, y, sId)
-    this.maxMoveTimer = 90
-    this.trash = true
-  }
-  move () {
-    this.sprite = 11 + Math.floor(frame / 6) % 3
-    if (this.moveTimer > 0) {
-      this.moveTimer--
-    } else {
-      this._startRandomMove(true)
-    }
-    this.pos.x += this.vel.x
-    this.pos.y += this.vel.y
-    if (getCollidingTiles(this.pos)) {
-      this.pos.x -= this.vel.x
-      this.pos.y -= this.vel.y
-      this._startRandomMove()
+      this.vel.x = -this.vel.x
     }
     super.move()
   }
@@ -231,11 +218,11 @@ const checkpoints = [
 
 const particles = []
 
-const skyXVel = 3
-const skyYVel = 2
+const skyXVel = 1.5
+const skyYVel = 1.5
 
-const xAccel = 0.1
-const xDecel = 0.05
+const xAccel = 1
+const xDecel = 1
 
 const scale = 4
 const tileSize = 16
@@ -357,13 +344,17 @@ function updateShots () {
     shot.pos.y += shot.vel.y
     shot.age++
 
-    if (shot.hurtsPlayer && isTouching(shot, player)) {
+    if (!player.dead && shot.hurtsPlayer && isTouching(shot, player)) {
       hurt(player, 10)
       playSound('playerhit')
       playSound('exp')
       spawnExplosion(shot.pos)
       shot.dead = true
       continue
+    }
+
+    if (shot.hurtsPlayer && shot.age > 20) {
+      shot.dead = true
     }
 
     if (!shot.hurtsPlayer) {
@@ -452,9 +443,6 @@ function draw () {
   if (state.page === 'intro') {
     drawIntroCard()
     return
-  } else if (state.page === 'endCard') {
-    drawEndCard()
-    return
   }
   ctx.fillRect(0, 0, canvas.width, canvas.height)
 
@@ -487,15 +475,17 @@ function drawHUD () {
       x += tileSize * scale / 2
     }
   }
-  // drawBar(player.ammo, player.maxAmmo, true, smallSprite, smallSprite + 1)
-  const sOffset = (player.healthBarFlashTimer > 0 && Math.floor(player.healthBarFlashTimer / 10) % 2 === 0) ? 8 : 2
-  drawBar(player.health, player.maxHealth, false, smallSprite + sOffset + 1, smallSprite + sOffset)
+  // const sOffset = (player.healthBarFlashTimer > 0 && Math.floor(player.healthBarFlashTimer / 10) % 2 === 0) ? 8 : 2
+  // drawBar(player.health, player.maxHealth, false, smallSprite + sOffset + 1, smallSprite + sOffset)
+
+  const scores = ['Talc', 'Gypsum', 'Calcite', 'Fluorite', 'Apatite', 'Orthoclase feldspar', 'Quartz', 'Topaz', 'Corundum', 'Diamond']
+  const scoreText = scores[player.score] || 'Diamond + ' + (player.score - scores.length + 1)
 
   // Goal text
   ctx.textAlign = 'left'
   ctx.textBaseline = 'bottom'
   const textHeight = canvas.height - (height / 2 - fontSize / 2)
-  ctx.fillText(`Use mouse and arrow keys. Score: ${player.score}.`, tileSize * scale, textHeight)
+  ctx.fillText(`Use arrow keys. Score: ${scoreText}.`, tileSize * scale, textHeight)
 }
 
 function drawParticle (p) {
@@ -505,7 +495,7 @@ function drawParticle (p) {
 }
 
 function drawShot (s) {
-  drawSprite(s.hurtsPlayer ? smallSprite : smallSprite + 6, s.pos.x, s.pos.y)
+  drawSprite(s.hurtsPlayer ? smallSprite + 5 : smallSprite + 6, s.pos.x, s.pos.y)
 }
 
 function drawPlayer (player) {
@@ -613,6 +603,21 @@ function updatePlayerAxis (player, axis, moreKey, lessKey, maxVel) {
   player.vel[axis] = vel
 }
 
+const levels = [{}, { type: 'beamer', x: 1.5, y: 1.5 }, { type: 'beamer', x: 8.5, y: 8.5 },
+  { type: 'bouncer', x: 2.5, y: 6.5 }, { type: 'bouncer', x: 2.5, y: 3.5 }]
+
+function levelUp () {
+  const level = levels[player.score]
+  if (level) {
+    if (level.type === 'beamer') {
+      ents.push(new Beamer(level.x * tileSize, level.y * tileSize))
+    }
+    if (level.type === 'bouncer') {
+      ents.push(new Bouncer(level.x * tileSize, level.y * tileSize))
+    }
+  }
+}
+
 function updatePlayer (player, isLocal) {
   if (player.dead) {
     if (isLocal) {
@@ -670,55 +675,44 @@ function updatePlayer (player, isLocal) {
       player.healthBarFlashTimer--
     }
 
-    if (player.winner) {
+    /*if (player.winner) {
       spawnExplosion(player.pos)
     } else {
       if (ents.length === 0 && !player.winner) {
         player.winner = true
         player.winTimer = 0
       }
-    }
+    }*/
 
     camera.pos.x = 149 // player.pos.x
     camera.pos.y = 87 // player.pos.y
 
-    if (keys.shoot && player.fireTimer === 0 && player.ammo > 0) {
+/*    if (keys.shoot && player.fireTimer === 0 && player.ammo > 0) {
       spawnShot(player)
       playSound('shoot')
       player.fireTimer = player.refireRate
       // player.ammo--
-    }
+    } */
     keys.shootHit = false
 
-    // checkpoints
     for (let checkpoint of checkpoints) {
-      const close = tileSize * 1.5
+      const close = tileSize
       const dist = distance(player.pos, tilePosToWorld(checkpoint))
-      if (dist < close && !player.checkpoints[checkpoint.id]) {
-        player.checkpoints[checkpoint.id] = true
-        // player.trail.push({ x: checkpoint.x * tileSize, y: checkpoint.y * tileSize, xVel: 0, yVel: 0 })
-
-        player.health = player.maxHealth
+      if (dist < close) {
         player.healthBarFlashTimer = 120
         playSound('heal')
-
-        /* // Did I win?
-        if (checkpoints.every(cp => player.checkpoints[cp.id])) {
-          console.log('you just won the game')
-          player.megaBird = true
-        } */
+        player.score++
+        if (checkpoint.x < 10) {
+          checkpoint.x = 16.5
+          checkpoint.y = 7.5
+        } else {
+          checkpoint.x = 2.5
+          checkpoint.y = 2.5
+        }
+        levelUp()
       }
     }
   }
-
-  /* if (player.megaBird && frame % 10 === 0) {
-    const p = { x: player.pos.x, y: player.pos.y, age: 0, type: 'firework0' }
-    const angle = (frame / 10) / 12 * Math.PI * 2
-    const force = 1.4
-    p.xVel = force * Math.cos(angle)
-    p.yVel = force * Math.sin(angle)
-    particles.push(p)
-  } */
 
   if (player.lostCoins) {
     player.checkpoints = {}
@@ -759,13 +753,23 @@ function updatePlayer (player, isLocal) {
   }
 }
 
+function getMouseXYFromEvent (e) {
+  const x = event.offsetX * canvas.width / canvas.offsetWidth / scale
+  const y = event.offsetY * canvas.height / canvas.offsetHeight / scale
+  return { x, y }
+}
+
 function spawnShot (ent) {
   if (!ent.fireMode) {
     const shot = {
       pos: { x: ent.pos.x, y: ent.pos.y },
       vel: { x: 0, y: 0 }
     }
-    shot.vel.x = ent.facingLeft ? -8 : 8
+
+    const angle = getAngle(ent.pos, mousePos)
+    const force = 8
+    shot.vel.x = force * Math.cos(angle)
+    shot.vel.y = force * Math.sin(angle)
     shot.hurtsPlayer = false
     shot.age = 0
     shots.push(shot)
@@ -834,6 +838,7 @@ function switchKey (key, state) {
     case ' ':
     case 'x':
     case '/':
+    case 'mouse':
       if (!keys.shoot && state === true) keys.shootHit = true
       keys.shoot = state
       break
@@ -860,6 +865,14 @@ window.addEventListener('keydown', function (e) {
 
 window.addEventListener('keyup', function (e) {
   switchKey(e.key, false)
+})
+
+window.addEventListener('mousedown', function (e) {
+  switchKey('mouse', true)
+})
+
+window.addEventListener('mouseup', function (e) {
+  switchKey('mouse', false)
 })
 
 function getIndexFromPixels (x, y) {
@@ -900,29 +913,21 @@ function restart () {
   frame = 0
   shots.length = 0
   ents.length = 0
-  player = new Player(2 * tileSize, 2 * tileSize)
+  player = new Player(5 * tileSize, 5 * tileSize)
   player.keys = keys
+  checkpoints.length = 0
 
   const level = world.map
   let cId = 0
+
+  checkpoints.push({ id: cId++, x: 2.5, y: 2.5 })
+
   for (let tY = 0; tY < world.height; tY++) {
     for (let tX = 0; tX < world.height; tX++) {
       const i = tX + tY * world.width
       const x = (i % world.width) + 0.5
       const y = Math.floor(i / world.width) + 0.5
       const sprite = level[i]
-      if (sprite === 8) {
-        checkpoints.push({ id: cId++, x, y })
-      }
-      if (sprite === 2) {
-        ents.push(new OhSpawner(x * tileSize, y * tileSize))
-      }
-      if (sprite === 15) {
-        ents.push(new BatSpawner(x * tileSize, y * tileSize))
-      }
-      if (sprite === 17) {
-        ents.push(new SignPost(x * tileSize, y * tileSize))
-      }
     }
   }
   console.log(checkpoints)
@@ -949,13 +954,7 @@ function printCardTip (text) {
 
 function drawIntroCard () {
   const pos = cardSetup()
-  printLine(pos, `Honey, I couldn't get a babysitter so you'll have to come\nto work with me.`)
-  printLine(pos)
-  printLine(pos, `Are we going in the spaceship?`, 'child')
-  printLine(pos)
-  printLine(pos, `Yes! We're going to go to an old factory, and I'll shoot\neverything that's in there. Then we can go get dinner.`)
-  printLine(pos)
-  printLine(pos, `Okay!`, 'child')
+  printLine(pos, `September`)
   const hint = (pos.char > pos.charLimit) ? 'Press space bar to skip' : 'Press space bar'
   state.active = (pos.char > pos.charLimit)
   printCardTip(hint)
@@ -970,33 +969,6 @@ function drawCardBorder () {
     drawSprite(23, (x + 0.5) * tileSizePx, tileSizePx / 2, false, true)
     drawSprite(23, (x + 0.5) * tileSizePx, canvas.height - tileSizePx / 2, false, true)
   }
-}
-
-function drawEndCard () {
-  const pos = cardSetup()
-  printLine(pos, `That's the last one. Let's go home.`)
-  printLine(pos)
-  printLine(pos, `...`, 'child')
-  printLine(pos); pos.y -= lineHeight * 2 // overwrite hacks
-  printLine(pos, `... Mum?`, 'child')
-  printLine(pos); pos.char -= blankLineCharDelay / 2 // Speed up this wait since there was so little text
-  printLine(pos, `Yes?`)
-  printLine(pos); pos.char -= blankLineCharDelay / 2 // Speed up this wait since there was so little text
-  printLine(pos, `Do you like cleaning factories?`, 'child')
-  printLine(pos)
-  printLine(pos, `...`)
-  printLine(pos); pos.y -= lineHeight * 2 // overwrite hacks
-  printLine(pos, `... well. It's not what I wanted to do when I was your age. But I like`)
-  printLine(pos, `having enough money to buy nice things, and send you to school. So`)
-  printLine(pos, `I guess I'm happy because my job gets us everything we need.`)
-  printLine(pos); pos.char += blankLineCharDelay * 2 // Slow down next line
-  printLine(pos, `I don't want to clean factories.`, 'child')
-  printLine(pos)
-  printLine(pos, `That's okay, honey. You can do something else.`)
-  pos.char += blankLineCharDelay * 2 // Extra delay before the end message
-  state.active = (pos.char > pos.charLimit)
-  if (!state.active) printCardTip('END')
-  drawCardBorder()
 }
 
 function printLine (pos, text, speaker) {
@@ -1018,3 +990,9 @@ function printLine (pos, text, speaker) {
     }
   }
 }
+
+window.addEventListener('mousemove', function (e) {
+  mousePos = getMouseXYFromEvent(e)
+  mousePos.x += camera.pos.x - canvas.width / 2 / scale
+  mousePos.y += camera.pos.y - canvas.height / 2 / scale
+})
